@@ -13,7 +13,6 @@ interface TopBarProps {
   onSelectModel: (m: string) => void;
   mode: SortingMode;
   onSetMode: (m: SortingMode) => void;
-  onSimulate: () => void;
   onUploadClick: () => void;
   engineOnline: boolean | null;
   engineName: string;
@@ -30,7 +29,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   onSelectModel,
   mode,
   onSetMode,
-  onSimulate,
   onUploadClick,
   engineOnline,
   engineName,
@@ -151,23 +149,14 @@ export const TopBar: React.FC<TopBarProps> = ({
             </button>
           </div>
 
-          {/* Action Buttons: Add File & Simulate */}
+          {/* Action Button: Add / Drop File */}
           <button
             onClick={onUploadClick}
-            className="flex items-center gap-1.5 font-semibold text-xs bg-white/10 hover:bg-white/15 text-white border border-white/10 rounded-xl px-3 py-1.5 transition-all shadow-sm"
-            title="Upload actual files to the watch folder"
+            className="flex items-center gap-1.5 font-semibold text-xs bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/30 rounded-xl px-3.5 py-1.5 transition-all shadow-lg shadow-indigo-600/20"
+            title="Upload actual files or folders to the watch directory"
           >
-            <Upload className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Drop Files</span>
-          </button>
-
-          <button
-            onClick={onSimulate}
-            className="flex items-center gap-1.5 font-semibold text-xs bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500/30 rounded-xl px-3 py-1.5 transition-all shadow-lg shadow-indigo-600/20"
-            title="Simulate a file arrival"
-          >
-            <Plus className="w-3.5 h-3.5 text-white" />
-            <span>Simulate File</span>
+            <Upload className="w-3.5 h-3.5 text-white" />
+            <span>Drop Files / Folders</span>
           </button>
         </div>
       </div>

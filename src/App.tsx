@@ -56,9 +56,9 @@ export default function App() {
     temperature: 0.2,
     timeoutMs: 8000,
     useOllama: true,
-    pace: 6,
     autoDelay: 900,
     promptTemplate: `You are Sift, an AI file-sorting engine. Classify the incoming file into exactly one category.\nRespond with JSON: {"category":"<category name>","confidence":<0..1>,"reason":"<max 12 words>"}\nCategories:\n{categories}`,
+    customInstructions: '',
     defaultMode: 'auto',
     watchMethod: 'fsevents',
     pollIntervalMs: 2000,
@@ -236,10 +236,20 @@ export default function App() {
     // 1. Try Ollama if connected
     if (settings.useOllama && ollamaStatus.connected) {
       try {
-        const sysPrompt = settings.promptTemplate.replace(
+        const baseSysPrompt = settings.promptTemplate.replace(
           '{categories}',
           categories.map((c) => `- ${c.name}: ${c.desc || c.exts}`).join('\n')
         );
+
+        const sysPrompt = `${baseSysPrompt}${
+          settings.customInstructions
+            ? `\n\nUSER CUSTOM INSTRUCTIONS:\n${settings.customInstructions}`
+            : ''
+        }`;
+
+        const itemDesc = `Item Name: ${file.name}\nItem Type: ${
+          file.isDir ? (file.isCohesive ? 'Cohesive Atomic Directory (Move folder as single unit)' : 'Directory') : 'File'
+        }\nExt: ${file.ext}\nSize: ${fmtSize(file.size)}${file.sampleContent ? `\nExcerpt: ${file.sampleContent}` : ''}`;
 
         const resp = await fetch('/api/ollama/proxy?path=/api/chat', {
           method: 'POST',
@@ -251,7 +261,7 @@ export default function App() {
             options: { temperature: settings.temperature },
             messages: [
               { role: 'system', content: sysPrompt },
-              { role: 'user', content: `File: ${file.name}\nExt: ${file.ext}\nSize: ${fmtSize(file.size)}` },
+              { role: 'user', content: itemDesc },
             ],
           }),
         });
@@ -394,57 +404,6 @@ export default function App() {
     ]);
   };
 
-  // Simulate File Arrival
-  const handleSimulateFile = () => {
-    const pool = [
-      'Q3-Financial-Report-2026.pdf',
-      'invoice_ACME_0042.pdf',
-      'IMG_2026_0725.heic',
-      'screenshot-2026.png',
-      'tax-returns-final.docx',
-      'podcast-ep-42.mp3',
-      'backup-app-data.zip',
-      'customer-analytics-q2.csv',
-      'landing-page-component.tsx',
-      'server-main.py',
-      'resume-candidate.pdf',
-      'meeting-notes-july.md',
-      'demo-reel-4k.mov',
-      'logo-vector-brand.fig',
-      'dataset-metrics.json',
-    ];
-
-    const randomName = pool[Math.floor(Math.random() * pool.length)];
-
-    fetch('/api/fs/create-simulated', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fileName: randomName,
-        content: `Simulated document contents for ${randomName} created at ${new Date().toISOString()}`,
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.file) {
-          const newFile: SortingFile = {
-            id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            name: data.file.name,
-            path: data.file.path,
-            ext: data.file.ext,
-            size: data.file.size,
-            sampleContent: `Simulated content excerpt for ${data.file.name}`,
-            addedAt: Date.now(),
-            status: 'queued',
-          };
-
-          setFiles((prev) => [...prev, newFile]);
-          addConsoleLog(`＋ Simulated file arrival: ${newFile.name}`, 'sys');
-        }
-      })
-      .catch((err) => console.error('Simulate error:', err));
-  };
-
   // File Upload Handler
   const handleUploadFiles = (fileList: FileList | File[]) => {
     const formData = new FormData();
@@ -570,7 +529,6 @@ export default function App() {
           onSelectModel={setSelectedModel}
           mode={mode}
           onSetMode={setMode}
-          onSimulate={handleSimulateFile}
           onUploadClick={() => fileInputRef.current?.click()}
           engineOnline={ollamaStatus.connected}
           engineName={selectedModel}
@@ -625,6 +583,10 @@ export default function App() {
                 onUpdatePromptTemplate={(tpl) =>
                   handleUpdateSettings({ ...settings, promptTemplate: tpl })
                 }
+                customInstructions={settings.customInstructions}
+                onUpdateCustomInstructions={(inst) =>
+                  handleUpdateSettings({ ...settings, customInstructions: inst })
+                }
                 onResetRules={() => {
                   setCategories(DEFAULT_CATEGORIES);
                   if (rules[0]) {
@@ -678,7 +640,7 @@ export default function App() {
           </div>
 
           <div className="hidden sm:block text-slate-500">
-            drop files anywhere to sort them · <kbd className="bg-white/10 border border-white/10 px-1 rounded text-slate-300">S</kbd> simulate file
+            drop files or folders anywhere into the watch window to sort them
           </div>
 
           <div>

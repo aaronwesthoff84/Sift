@@ -149,22 +149,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
 
             <div>
-              <div className="flex justify-between text-[10px] uppercase font-bold text-slate-400 mb-1">
-                <span>Simulated Pace</span>
-                <span className="text-amber-400 font-bold">~{settings.pace}s</span>
-              </div>
-              <input
-                type="range"
-                min="2"
-                max="20"
-                step="1"
-                value={settings.pace}
-                onChange={(e) => handleChange('pace', parseInt(e.target.value))}
-                className="w-full accent-amber-500"
-              />
-            </div>
-
-            <div>
               <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
                 Auto-Sort Delay (ms)
               </label>
@@ -189,6 +173,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <option value="polling" className="bg-[#0c0d0e]">Polling Fallback Interval</option>
               </select>
             </div>
+          </div>
+        </div>
+
+        {/* 3. Custom AI Sorting Instructions Card */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-lg backdrop-blur-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+            <h3 className="font-bold text-xs uppercase tracking-widest text-slate-300">
+              Custom AI Sorting Instructions
+            </h3>
+          </div>
+
+          <div className="space-y-2 font-mono text-xs">
+            <label className="block text-[10px] uppercase font-bold text-slate-400">
+              Fine-Tuned Processing Guidelines
+            </label>
+            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+              These instructions will be appended to every Ollama AI request along with the base classification schema.
+            </p>
+            <textarea
+              rows={4}
+              value={settings.customInstructions || ''}
+              onChange={(e) => handleChange('customInstructions', e.target.value)}
+              placeholder="e.g. Put all invoices under Documents/Invoices. Treat Python files as Code/Backend..."
+              className="w-full bg-white/5 focus:bg-white/10 border border-white/10 focus:border-indigo-500/50 focus:outline-none rounded-xl p-3 text-white text-xs font-mono leading-relaxed resize-none"
+            />
           </div>
         </div>
 

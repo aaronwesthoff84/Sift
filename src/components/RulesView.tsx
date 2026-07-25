@@ -7,6 +7,8 @@ interface RulesViewProps {
   onUpdateRules: (rules: Rule[]) => void;
   promptTemplate: string;
   onUpdatePromptTemplate: (tpl: string) => void;
+  customInstructions?: string;
+  onUpdateCustomInstructions?: (inst: string) => void;
   onResetRules: () => void;
 }
 
@@ -15,6 +17,8 @@ export const RulesView: React.FC<RulesViewProps> = ({
   onUpdateRules,
   promptTemplate,
   onUpdatePromptTemplate,
+  customInstructions,
+  onUpdateCustomInstructions,
   onResetRules,
 }) => {
   const currentRule = rules[0];
@@ -218,6 +222,29 @@ export const RulesView: React.FC<RulesViewProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Custom AI Instructions Box */}
+        {onUpdateCustomInstructions && (
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-lg backdrop-blur-sm flex flex-col gap-3.5">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+              <h4 className="font-bold text-xs uppercase tracking-widest text-slate-400">
+                User Custom Instructions
+              </h4>
+            </div>
+
+            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+              Fine-tune the sorting logic by adding user-specific directives. These instructions are appended to every AI categorization request.
+            </p>
+
+            <textarea
+              value={customInstructions || ''}
+              onChange={(e) => onUpdateCustomInstructions(e.target.value)}
+              placeholder="e.g. Move financial invoices into Documents/Invoices. Put Python scripts into Code/Backend..."
+              className="w-full h-32 font-mono text-xs bg-black/40 focus:bg-black/60 border border-white/10 focus:border-indigo-500/50 focus:outline-none rounded-2xl p-3.5 text-slate-200 leading-relaxed resize-y"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

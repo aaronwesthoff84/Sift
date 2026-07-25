@@ -35,6 +35,91 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Semantic Folder Normalizer Map & Helper
+const SEMANTIC_CATEGORY_MAP: Record<string, string> = {
+  docs: "Documents",
+  documentation: "Documents",
+  document: "Documents",
+  notes: "Documents",
+  prose: "Documents",
+  pics: "Images",
+  photos: "Images",
+  pictures: "Images",
+  gfx: "Images",
+  src: "Code",
+  source: "Code",
+  dev: "Code",
+  scripts: "Code",
+  vids: "Media",
+  video: "Media",
+  videos: "Media",
+  audio: "Media",
+  music: "Media",
+  zips: "Archives",
+  compressed: "Archives",
+  bundles: "Archives",
+  datasets: "Data",
+  tables: "Data",
+  spreadsheets: "Data",
+  graphics: "Design",
+  mockups: "Design",
+  artwork: "Design",
+};
+
+export function resolveCanonicalSubfolder(suggestedName: string, existingFolders: string[]): string {
+  if (!suggestedName) return "Misc";
+  const trimmed = suggestedName.trim();
+  const lower = trimmed.toLowerCase();
+
+  const exactMatch = existingFolders.find(f => f.toLowerCase() === lower);
+  if (exactMatch) return exactMatch;
+
+  if (SEMANTIC_CATEGORY_MAP[lower]) {
+    const aliasTarget = SEMANTIC_CATEGORY_MAP[lower];
+    const aliasExisting = existingFolders.find(f => f.toLowerCase() === aliasTarget.toLowerCase());
+    if (aliasExisting) return aliasExisting;
+    return aliasTarget;
+  }
+
+  return trimmed;
+}
+
+// Cohesive Directory Inspector
+export function isCohesiveFolder(dirPath: string): boolean {
+  try {
+    const items = fs.readdirSync(dirPath);
+    const cohesiveSignatures = [
+      ".git",
+      "package.json",
+      "Cargo.toml",
+      "pyproject.toml",
+      "go.mod",
+      "Makefile",
+      "CMakeLists.txt",
+      "pom.xml",
+      "build.gradle",
+      "requirements.txt",
+      "Gemfile",
+      ".xcodeproj",
+      ".xcworkspace",
+    ];
+
+    if (items.some(item => cohesiveSignatures.includes(item) || item.endsWith(".app"))) {
+      return true;
+    }
+
+    const exts = items
+      .filter(i => !i.startsWith("."))
+      .map(i => path.extname(i).toLowerCase())
+      .filter(Boolean);
+
+    if (exts.length >= 3 && new Set(exts).size === 1) {
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
 // Database Interface
 interface AppDatabase {
   settings: {
@@ -43,9 +128,9 @@ interface AppDatabase {
     temperature: number;
     timeoutMs: number;
     useOllama: boolean;
-    pace: number;
     autoDelay: number;
     promptTemplate: string;
+    customInstructions: string;
     defaultMode: "auto" | "review";
     watchMethod: "fsevents" | "polling";
     pollIntervalMs: number;
@@ -133,9 +218,9 @@ function loadDb(): AppDatabase {
       temperature: 0.2,
       timeoutMs: 8000,
       useOllama: true,
-      pace: 6,
       autoDelay: 900,
       promptTemplate: DEFAULT_PROMPT,
+      customInstructions: "",
       defaultMode: "auto",
       watchMethod: "fsevents",
       pollIntervalMs: 2000,
@@ -267,38 +352,70 @@ app.post("/api/fs/upload", upload.array("files"), (req, res) => {
   res.json({ status: "ok", count: results.length, files: results });
 });
 
-// Create dummy simulated file in Watch directory
-app.post("/api/fs/create-simulated", (req, res) => {
-  const { fileName, content } = req.body;
-  const targetName = fileName || `simulated-${Date.now()}.txt`;
-  const filePath = path.join(WATCH_DIR, targetName);
-  const fileText = content || `Sample auto-generated file content created at ${new Date().toISOString()}`;
-
-  fs.writeFileSync(filePath, fileText, "utf-8");
-  const stats = fs.statSync(filePath);
-
-  res.json({
-    status: "ok",
-    file: {
-      name: targetName,
-      path: filePath,
-      size: stats.size,
-      ext: path.extname(targetName).replace(".", "").toLowerCase(),
-    }
-  });
-});
-
-// List files in Watch folder
+// List files and directories in Watch folder
 app.get("/api/fs/watch-files", (req, res) => {
   try {
-    const files = fs.readdirSync(WATCH_DIR);
-    const details = files
-      .filter(f => !f.startsWith("."))
-      .map(f => {
-        const fullPath = path.join(WATCH_DIR, f);
-        const stats = fs.statSync(fullPath);
+    const rawItems = fs.readdirSync(WATCH_DIR).filter(f => !f.startsWith("."));
+    const details: any[] = [];
+
+    const existingSubfolders = fs.existsSync(SHELF_DIR) ? fs.readdirSync(SHELF_DIR) : [];
+
+    rawItems.forEach(f => {
+      const fullPath = path.join(WATCH_DIR, f);
+      const stats = fs.statSync(fullPath);
+
+      if (stats.isDirectory()) {
+        const cohesive = isCohesiveFolder(fullPath);
+
+        if (cohesive) {
+          // Cohesive unit: Treat as atomic folder item
+          details.push({
+            name: f,
+            path: fullPath,
+            size: 0,
+            ext: "folder",
+            isDir: true,
+            isCohesive: true,
+            sampleContent: `Atomic project/bundle directory containing project structure`,
+            mtime: stats.mtimeMs,
+          });
+        } else {
+          // Unstructured / Mixed Directory: Descend into folder and add loose items
+          try {
+            const subItems = fs.readdirSync(fullPath).filter(sf => !sf.startsWith("."));
+            subItems.forEach(sf => {
+              const subPath = path.join(fullPath, sf);
+              const subSt = fs.statSync(subPath);
+              if (subSt.isFile()) {
+                details.push({
+                  name: `${f}/${sf}`,
+                  path: subPath,
+                  size: subSt.size,
+                  ext: path.extname(sf).replace(".", "").toLowerCase(),
+                  isDir: false,
+                  isCohesive: false,
+                  sampleContent: `Item inside mixed folder ${f}`,
+                  mtime: subSt.mtimeMs,
+                });
+              } else if (subSt.isDirectory()) {
+                const subCohesive = isCohesiveFolder(subPath);
+                details.push({
+                  name: `${f}/${sf}`,
+                  path: subPath,
+                  size: 0,
+                  ext: "folder",
+                  isDir: true,
+                  isCohesive: subCohesive,
+                  sampleContent: subCohesive ? `Cohesive subfolder in ${f}` : `Subfolder in ${f}`,
+                  mtime: subSt.mtimeMs,
+                });
+              }
+            });
+          } catch (e) {}
+        }
+      } else {
+        // Normal file
         let sampleContent = "";
-        // Read excerpt for text files under 2MB
         if (stats.size < 2000000) {
           const ext = path.extname(f).toLowerCase();
           if ([".txt", ".md", ".json", ".csv", ".py", ".js", ".ts", ".html", ".css", ".sql", ".yml", ".xml"].includes(ext)) {
@@ -307,15 +424,19 @@ app.get("/api/fs/watch-files", (req, res) => {
             } catch (e) {}
           }
         }
-        return {
+        details.push({
           name: f,
           path: fullPath,
           size: stats.size,
           ext: path.extname(f).replace(".", "").toLowerCase(),
+          isDir: false,
+          isCohesive: false,
           sampleContent,
           mtime: stats.mtimeMs,
-        };
-      });
+        });
+      }
+    });
+
     res.json({ files: details });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -357,23 +478,16 @@ app.get("/api/fs/shelf", (req, res) => {
   }
 });
 
-// Move file from Watch to Shelf Subfolder with Duplicate & Locking handling
+// Move file/folder from Watch to Shelf Subfolder with Canonical Normalization & Locking handling
 app.post("/api/fs/move", (req, res) => {
   const { fileName, categoryId, engine, confidence, ms, reason } = req.body;
 
   const sourcePath = path.join(WATCH_DIR, fileName);
   if (!fs.existsSync(sourcePath)) {
-    // If file doesn't exist on disk, we can still process simulated state or return clear message
-    return res.json({
-      status: "ok",
-      simulated: true,
-      fileName,
-      movedPath: path.join(SHELF_DIR, categoryId, fileName),
-      message: "Moved file record in virtual sandbox"
-    });
+    return res.status(404).json({ error: "Source file or directory does not exist", fileName });
   }
 
-  // Check if file is locked or in use (e.g. extension .lock or file locked check)
+  // Check if file is locked or in use
   if (fileName.endsWith(".lock")) {
     return res.status(423).json({
       error: "File is locked by another process",
@@ -383,20 +497,24 @@ app.post("/api/fs/move", (req, res) => {
   }
 
   const category = (db.rules[0]?.categories || DEFAULT_CATEGORIES).find(c => c.id === categoryId) || DEFAULT_CATEGORIES[7];
-  const targetSubfolder = category.targetSubfolder || category.name;
-  const targetDir = path.join(SHELF_DIR, targetSubfolder);
+  
+  // Semantic Canonical Deduplication & Normalization Check
+  const existingShelfFolders = fs.readdirSync(SHELF_DIR);
+  const rawTargetName = category.targetSubfolder || category.name;
+  const canonicalSubfolder = resolveCanonicalSubfolder(rawTargetName, existingShelfFolders);
+  const targetDir = path.join(SHELF_DIR, canonicalSubfolder);
 
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  // Duplicate filename resolution: append incrementing counter e.g. report (1).pdf
-  let targetFileName = fileName;
+  // Duplicate filename resolution
+  let targetFileName = path.basename(fileName);
   let targetPath = path.join(targetDir, targetFileName);
 
   if (fs.existsSync(targetPath)) {
-    const ext = path.extname(fileName);
-    const base = path.basename(fileName, ext);
+    const ext = path.extname(targetFileName);
+    const base = path.basename(targetFileName, ext);
     let counter = 1;
     while (fs.existsSync(path.join(targetDir, `${base} (${counter})${ext}`))) {
       counter++;

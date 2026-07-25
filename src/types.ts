@@ -39,6 +39,8 @@ export interface SortingFile {
   path?: string;
   ext: string;
   size: number;
+  isDir?: boolean;
+  isCohesive?: boolean;
   sampleContent?: string;
   addedAt: number;
   status: 'queued' | 'analyzing' | 'review' | 'decided' | 'sorting' | 'sorted' | 'skipped' | 'locked' | 'error';
@@ -77,9 +79,9 @@ export interface Settings {
   temperature: number;
   timeoutMs: number;
   useOllama: boolean;
-  pace: number;
   autoDelay: number;
   promptTemplate: string;
+  customInstructions: string;
   defaultMode: SortingMode;
   watchMethod: 'fsevents' | 'polling';
   pollIntervalMs: number;
