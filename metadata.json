@@ -1,0 +1,6 @@
+{
+  "name": "Sift",
+  "description": "Universal cross-platform AI-powered file sorting desktop application powered by Ollama and local heuristics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
