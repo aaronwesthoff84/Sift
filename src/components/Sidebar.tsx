@@ -7,6 +7,7 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   queueLength: number;
   ollamaStatus: OllamaStatus;
+  activeModel?: string;
   onTestOllama: () => void;
 }
 
@@ -15,6 +16,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   queueLength,
   ollamaStatus,
+  activeModel,
   onTestOllama,
 }) => {
   const navItems = [
@@ -73,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="font-mono text-xs font-semibold text-indigo-400 truncate">
-          {ollamaStatus.availableModels[0] || 'llama3.2'}
+          {activeModel || ollamaStatus.availableModels[0] || 'llama3.2'}
         </div>
 
         <div className="font-mono text-[10px] text-slate-400">

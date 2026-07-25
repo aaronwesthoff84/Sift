@@ -200,14 +200,15 @@ export const WatchView: React.FC<WatchViewProps> = ({
                             <div>
                               <div className="flex items-center justify-between text-xs">
                                 <span
-                                  className="font-bold text-[11px] px-2.5 py-0.5 rounded-full border"
+                                  className="font-bold text-[11px] px-2.5 py-0.5 rounded-full border truncate max-w-[180px]"
                                   style={{
                                     color: cat.color,
                                     backgroundColor: `${cat.color}25`,
                                     borderColor: `${cat.color}50`,
                                   }}
+                                  title={decision.subpath || cat.name}
                                 >
-                                  {cat.name}
+                                  {decision.subpath || cat.name}
                                 </span>
                                 <span className="font-mono text-xs font-bold text-slate-300">
                                   {confPct}% confidence

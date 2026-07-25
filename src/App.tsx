@@ -20,6 +20,8 @@ import { ActivityView } from './components/ActivityView';
 import { SettingsView } from './components/SettingsView';
 import { PermissionModal } from './components/PermissionModal';
 
+import { DEFAULT_APP_NAME, APP_VERSION } from './utils/branding';
+
 const DEFAULT_CATEGORIES: Category[] = [
   { id: 'documents', name: 'Documents', color: '#2f6fdb', desc: 'Reports, invoices, PDFs, contracts, notes, prose', exts: 'pdf,doc,docx,txt,md,rtf,pages,tex,epub', kw: ['invoice', 'report', 'contract', 'notes', 'resume', 'letter'], targetSubfolder: 'Documents' },
   { id: 'images', name: 'Images', color: '#d6488f', desc: 'Photos, screenshots, illustrations, graphic assets', exts: 'jpg,jpeg,png,heic,gif,webp,svg,tiff,bmp,avif', kw: ['screenshot', 'photo', 'img', 'picture', 'wallpaper', 'scan'], targetSubfolder: 'Images' },
@@ -39,10 +41,8 @@ export default function App() {
   const [watching, setWatching] = useState<boolean>(true);
   const [watchPath, setWatchPath] = useState<string>('~/Downloads');
   const [shelfPath, setShelfPath] = useState<string>('~/Documents/Shelf');
-  const [mode, setMode] = useState<SortingMode>('auto');
 
   const [models, setModels] = useState<string[]>(DEFAULT_MODELS);
-  const [selectedModel, setSelectedModel] = useState<string>('llama3.2');
 
   const [files, setFiles] = useState<SortingFile[]>([]);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
@@ -57,12 +57,17 @@ export default function App() {
     timeoutMs: 8000,
     useOllama: true,
     autoDelay: 900,
-    promptTemplate: `You are Sift, an AI file-sorting engine. Classify the incoming file into exactly one category.\nRespond with JSON: {"category":"<category name>","confidence":<0..1>,"reason":"<max 12 words>"}\nCategories:\n{categories}`,
+    promptTemplate: `You are Sift, an AI file-sorting engine. Classify the incoming file into exactly one category.\nRespond with JSON: {"category":"<category name>","subpath":"<Project or Topic>/<Phase or Subgroup>/<Category>","confidence":<0..1>,"reason":"<max 12 words>"}\nCategories:\n{categories}`,
     customInstructions: '',
     defaultMode: 'auto',
     watchMethod: 'fsevents',
     pollIntervalMs: 2000,
+    watchFolders: [],
+    appName: DEFAULT_APP_NAME,
   });
+
+  const mode = settings.defaultMode;
+  const selectedModel = settings.model;
 
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({
     connected: null,
@@ -178,9 +183,8 @@ export default function App() {
       const available = (data.models || []).map((m: any) => m.name);
       const modelList = available.length ? available : DEFAULT_MODELS;
 
-      setModels(modelList);
       if (!modelList.includes(selectedModel)) {
-        setSelectedModel(modelList[0] || 'llama3.2');
+        handleUpdateSettings({ ...settings, model: modelList[0] || 'llama3.2' });
       }
 
       setOllamaStatus({
@@ -279,6 +283,7 @@ export default function App() {
           decision = {
             catId: matchedCat.id,
             categoryName: matchedCat.name,
+            subpath: typeof parsed.subpath === 'string' && parsed.subpath.trim() ? parsed.subpath.trim() : undefined,
             confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.88,
             reason: String(parsed.reason || 'Analyzed via Ollama model').slice(0, 120),
             engine: 'ollama',
@@ -304,13 +309,15 @@ export default function App() {
     const finalDecision = decision;
     const catObj = categories.find((c) => c.id === finalDecision.catId) || categories[categories.length - 1];
 
+    const destLabel = finalDecision.subpath ? `${finalDecision.subpath}` : catObj.name;
+
     addConsoleLog(
-      `<span class="tag">[${finalDecision.engine.toUpperCase()}]</span> <b>${file.name}</b> ➔ <span style="color:${catObj.color};font-weight:bold">${catObj.name}</span> (${Math.round(finalDecision.confidence * 100)}%) — ${finalDecision.reason}`,
+      `<span class="tag">[${finalDecision.engine.toUpperCase()}]</span> <b>${file.name}</b> ➔ <span style="color:${catObj.color};font-weight:bold">${destLabel}</span> (${Math.round(finalDecision.confidence * 100)}%) — ${finalDecision.reason}`,
       finalDecision.engine === 'ollama' ? 'oll' : 'heur'
     );
 
     setRecentDecisions((prev) => [
-      { id: `${Date.now()}`, name: file.name, catName: catObj.name, color: catObj.color, t: nowT().slice(0, 5) },
+      { id: `${Date.now()}`, name: file.name, catName: destLabel, color: catObj.color, t: nowT().slice(0, 5) },
       ...prev.slice(0, 9),
     ]);
 
@@ -347,7 +354,9 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         fileName: file.name,
+        itemPath: file.path,
         categoryId: decision.catId,
+        subpath: decision.subpath,
         engine: decision.engine,
         confidence: decision.confidence,
         ms: decision.ms,
@@ -526,12 +535,13 @@ export default function App() {
           onEditPath={() => setPermissionModal({ isOpen: true, path: watchPath })}
           models={models}
           selectedModel={selectedModel}
-          onSelectModel={setSelectedModel}
+          onSelectModel={(m) => handleUpdateSettings({ ...settings, model: m })}
           mode={mode}
-          onSetMode={setMode}
+          onSetMode={(m) => handleUpdateSettings({ ...settings, defaultMode: m })}
           onUploadClick={() => fileInputRef.current?.click()}
           engineOnline={ollamaStatus.connected}
           engineName={selectedModel}
+          appName={settings.appName}
         />
 
         {/* Main Body */}
@@ -542,6 +552,7 @@ export default function App() {
             setActiveTab={setActiveTab}
             queueLength={files.length}
             ollamaStatus={ollamaStatus}
+            activeModel={selectedModel}
             onTestOllama={() => testOllamaConnection()}
           />
 

@@ -16,6 +16,7 @@ interface TopBarProps {
   onUploadClick: () => void;
   engineOnline: boolean | null;
   engineName: string;
+  appName?: string;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -32,6 +33,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onUploadClick,
   engineOnline,
   engineName,
+  appName = 'Sift',
 }) => {
   return (
     <header className="flex-none flex flex-col bg-black/40 backdrop-blur-md border-b border-white/10 select-none text-slate-200">
@@ -67,7 +69,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="w-4 h-4 rounded-md bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-[10px] shadow-sm">
             ◆
           </span>
-          <span className="tracking-tight">SIFT.AI</span>
+          <span className="tracking-tight uppercase">{appName}</span>
           <span className="font-mono text-[10px] font-medium text-slate-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/10">
             v1.2.0
           </span>

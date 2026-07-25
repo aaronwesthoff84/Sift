@@ -96,8 +96,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   onChange={(e) => handleChange('useOllama', e.target.checked)}
                   className="accent-indigo-500 w-4 h-4 rounded"
                 />
-                <span>Enable Ollama AI file sorting</span>
+                <span>Enable Ollama Local AI File Classification</span>
               </label>
+
+              {/* Explanatory Help Box */}
+              <div className="p-3 bg-white/5 border border-white/10 rounded-xl text-[11px] font-sans text-slate-300 leading-relaxed">
+                <b className="text-white block mb-0.5">Explicit Execution Behavior:</b>
+                {settings.useOllama ? (
+                  <span>
+                    <b>AI Classification Active:</b> Sift sends file metadata to your local Ollama LLM (<code className="text-indigo-300 font-mono">{settings.model}</code>) for multi-tiered semantic folder grouping.
+                  </span>
+                ) : (
+                  <span>
+                    <b>Local Heuristics Fallback:</b> AI requests are disabled. Sift uses deterministic extension and keyword matching rules without network or LLM calls.
+                  </span>
+                )}
+              </div>
             </div>
 
             <button
@@ -105,8 +119,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className="mt-3 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20"
             >
               <RefreshCw className="w-3.5 h-3.5 text-indigo-200" />
-              <span>Test Ollama & Refresh Models</span>
+              <span>Test Connection & Refresh Models</span>
             </button>
+          </div>
+        </div>
+
+        {/* 2. App Branding & Custom Name Card */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 shadow-lg backdrop-blur-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <h3 className="font-bold text-xs uppercase tracking-widest text-slate-300">
+              App Branding & Name
+            </h3>
+          </div>
+
+          <div className="space-y-3 text-xs font-mono">
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+                Active Application Name
+              </label>
+              <input
+                type="text"
+                value={settings.appName || 'Sift'}
+                onChange={(e) => handleChange('appName', e.target.value)}
+                placeholder="e.g. Sift, SortMaster..."
+                className="w-full bg-white/5 focus:bg-white/10 border border-white/10 focus:border-indigo-500/50 focus:outline-none rounded-xl p-2.5 text-white font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
+                Branding Name Presets
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {['Sift', 'FileAutopilot', 'SortMaster', 'OmniSorter', 'LocalFileAI'].map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => handleChange('appName', name)}
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
+                      settings.appName === name
+                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 font-bold'
+                        : 'bg-white/5 text-slate-400 border-white/10 hover:text-white'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -172,6 +233,72 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <option value="fsevents" className="bg-[#0c0d0e]">OS Native (FSEvents / ReadDirectoryChangesW / inotify)</option>
                 <option value="polling" className="bg-[#0c0d0e]">Polling Fallback Interval</option>
               </select>
+            </div>
+
+            {/* Multi-Watch Folder Sources */}
+            <div className="pt-3 border-t border-white/10 space-y-2">
+              <label className="block text-[10px] uppercase font-bold text-slate-400">
+                Watched Source Directories ({ (settings.watchFolders || []).length })
+              </label>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                {(settings.watchFolders || []).map((wf) => (
+                  <div key={wf.id} className="p-2.5 bg-white/5 rounded-xl border border-white/10 flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-white text-xs truncate">{wf.label || wf.path}</div>
+                      <div className="text-[10px] text-slate-400 font-mono truncate">{wf.path}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = (settings.watchFolders || []).map((w) =>
+                            w.id === wf.id ? { ...w, active: !w.active } : w
+                          );
+                          handleChange('watchFolders', updated);
+                        }}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          wf.active
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                        }`}
+                      >
+                        {wf.active ? 'Active' : 'Paused'}
+                      </button>
+                      {(settings.watchFolders || []).length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = (settings.watchFolders || []).filter((w) => w.id !== wf.id);
+                            handleChange('watchFolders', updated);
+                          }}
+                          className="text-slate-400 hover:text-rose-400 text-xs px-1"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const newPath = prompt('Enter additional directory path to watch:');
+                  if (newPath && newPath.trim()) {
+                    const newFolder = {
+                      id: `wf-${Date.now()}`,
+                      path: newPath.trim(),
+                      active: true,
+                      label: newPath.split('/').pop() || 'Custom Folder',
+                    };
+                    handleChange('watchFolders', [...(settings.watchFolders || []), newFolder]);
+                  }
+                }}
+                className="w-full text-center text-xs font-semibold py-1.5 px-3 rounded-xl border border-dashed border-white/20 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-slate-300 hover:text-white transition-all"
+              >
+                + Add Source Folder…
+              </button>
             </div>
           </div>
         </div>

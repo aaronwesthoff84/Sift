@@ -23,9 +23,17 @@ export interface Rule {
   categories: Category[];
 }
 
+export interface WatchFolder {
+  id: string;
+  path: string;
+  active: boolean;
+  label?: string;
+}
+
 export interface Decision {
   catId: string;
   categoryName: string;
+  subpath?: string;
   confidence: number;
   reason: string;
   engine: SortingEngine;
@@ -85,6 +93,8 @@ export interface Settings {
   defaultMode: SortingMode;
   watchMethod: 'fsevents' | 'polling';
   pollIntervalMs: number;
+  watchFolders: WatchFolder[];
+  appName: string;
 }
 
 export interface OllamaStatus {
