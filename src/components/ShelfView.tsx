@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Category } from '../types';
 import { fmtSize } from '../utils/helpers';
-import { Folder, FileText, Undo2, ExternalLink, Eye, Search } from 'lucide-react';
+import { Folder, FileText, Undo2, ExternalLink, Eye, Search, ChevronRight, ChevronDown, ListTree, Grid } from 'lucide-react';
 
 interface ShelfItem {
   name: string;
@@ -22,6 +22,15 @@ interface ShelfViewProps {
   shelfDirPath: string;
 }
 
+interface TreeNode {
+  name: string;
+  fullPath: string;
+  isDir: boolean;
+  children: Record<string, TreeNode>;
+  files: ShelfItem[];
+  catId?: string;
+}
+
 export const ShelfView: React.FC<ShelfViewProps> = ({
   categories,
   shelfData,
@@ -32,6 +41,130 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [previewFile, setPreviewFile] = useState<ShelfItem | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'tree'>('grid');
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (nodePath: string) => {
+    setExpandedNodes((prev) => ({ ...prev, [nodePath]: !prev[nodePath] }));
+  };
+
+  // Build tree from all categories and shelf files
+  const buildTree = (): TreeNode => {
+    const root: TreeNode = {
+      name: 'Shelf Root',
+      fullPath: shelfDirPath,
+      isDir: true,
+      children: {},
+      files: [],
+    };
+
+    categories.forEach((cat) => {
+      const catSubfolder = cat.targetSubfolder || cat.name;
+      const catNode: TreeNode = {
+        name: catSubfolder,
+        fullPath: `${shelfDirPath}/${catSubfolder}`,
+        isDir: true,
+        children: {},
+        files: [],
+        catId: cat.id,
+      };
+
+      const items = shelfData[cat.id] || [];
+      items.forEach((item) => {
+        const parts = item.name.split('/');
+        if (parts.length === 1) {
+          catNode.files.push(item);
+        } else {
+          // Nested path: e.g. ProjectA/Requirements/Images/file.jpg
+          let current = catNode;
+          for (let i = 0; i < parts.length - 1; i++) {
+            const part = parts[i];
+            if (!current.children[part]) {
+              current.children[part] = {
+                name: part,
+                fullPath: `${current.fullPath}/${part}`,
+                isDir: true,
+                children: {},
+                files: [],
+                catId: cat.id,
+              };
+            }
+            current = current.children[part];
+          }
+          current.files.push({ ...item, name: parts[parts.length - 1] });
+        }
+      });
+
+      root.children[catSubfolder] = catNode;
+    });
+
+    return root;
+  };
+
+  const renderTreeNode = (node: TreeNode, depth = 0) => {
+    const isExpanded = expandedNodes[node.fullPath] ?? depth < 1;
+    const childKeys = Object.keys(node.children);
+    const totalFiles = node.files.length + childKeys.reduce((acc, k) => acc + countTreeFiles(node.children[k]), 0);
+
+    return (
+      <div key={node.fullPath} className="ml-3 my-1 font-mono text-xs select-none">
+        <div
+          onClick={() => toggleExpand(node.fullPath)}
+          className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-white/10"
+        >
+          {childKeys.length > 0 || node.files.length > 0 ? (
+            isExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5 text-indigo-400" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+            )
+          ) : (
+            <span className="w-3.5 h-3.5" />
+          )}
+
+          <Folder className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+          <span className="font-bold text-white">{node.name}</span>
+          <span className="font-mono text-[10px] text-slate-400 bg-white/5 px-2 py-0.5 rounded-full border border-white/10 ml-auto">
+            {totalFiles} item{totalFiles === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        {isExpanded && (
+          <div className="pl-4 border-l border-white/10 ml-3 mt-1 space-y-1">
+            {childKeys.map((key) => renderTreeNode(node.children[key], depth + 1))}
+            {node.files.map((file, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between p-2 px-3 hover:bg-white/10 rounded-lg text-slate-300 text-xs transition-colors"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-3.5 h-3.5 text-slate-400 flex-none" />
+                  <span className="truncate">{file.name}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] text-slate-400">{fmtSize(file.size)}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (node.catId) onUndoSortFile(file.name, node.catId);
+                    }}
+                    className="text-rose-400 hover:text-rose-300 p-1"
+                    title="Undo Move"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const countTreeFiles = (node: TreeNode): number => {
+    return node.files.length + Object.keys(node.children).reduce((acc, k) => acc + countTreeFiles(node.children[k]), 0);
+  };
 
   const selectedCat =
     categories.find((c) => c.id === selectedCatId) || categories[0];
@@ -55,74 +188,111 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
           </p>
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-64">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search files in shelf…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full font-mono text-xs bg-white/5 border border-white/10 focus:border-indigo-500/50 focus:bg-white/10 focus:outline-none rounded-xl pl-8 pr-3 py-2 text-white placeholder-slate-500"
-          />
+        {/* Search & View Mode Controls */}
+        <div className="flex items-center gap-3">
+          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                viewMode === 'grid' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Category Grid View"
+            >
+              <Grid className="w-3.5 h-3.5" />
+              <span>Grid</span>
+            </button>
+            <button
+              onClick={() => setViewMode('tree')}
+              className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                viewMode === 'tree' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+              }`}
+              title="Nested Tree Hierarchy View"
+            >
+              <ListTree className="w-3.5 h-3.5" />
+              <span>Tree View</span>
+            </button>
+          </div>
+
+          <div className="relative w-60">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search files in shelf…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full font-mono text-xs bg-white/5 border border-white/10 focus:border-indigo-500/50 focus:bg-white/10 focus:outline-none rounded-xl pl-8 pr-3 py-2 text-white placeholder-slate-500"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Target Folders Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3.5">
-        {categories.map((c) => {
-          const fileList = shelfData[c.id] || [];
-          const count = fileList.length;
-          const isSelected = selectedCatId === c.id;
+      {viewMode === 'tree' ? (
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 shadow-lg backdrop-blur-sm">
+          <div className="flex items-center gap-2 pb-3 border-b border-white/10 mb-3">
+            <ListTree className="w-4 h-4 text-indigo-400" />
+            <h3 className="font-bold text-xs uppercase tracking-widest text-slate-300">
+              Interactive Nested Folder Tree
+            </h3>
+          </div>
+          {renderTreeNode(buildTree())}
+        </div>
+      ) : (
+        <>
+          {/* Target Folders Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3.5">
+            {categories.map((c) => {
+              const fileList = shelfData[c.id] || [];
+              const count = fileList.length;
+              const isSelected = selectedCatId === c.id;
 
-          return (
-            <button
-              key={c.id}
-              onClick={() => onSelectCategory(c.id)}
-              className={`border bg-white/5 rounded-2xl p-3.5 flex flex-col justify-between items-start text-left relative overflow-hidden transition-all group backdrop-blur-sm ${
-                isSelected
-                  ? 'border-2 shadow-xl scale-[1.02] bg-white/10'
-                  : 'border-white/10 hover:border-white/20 hover:bg-white/10 shadow-sm'
-              }`}
-              style={{
-                borderColor: isSelected ? c.color : undefined,
-                boxShadow: isSelected ? `0 0 20px -5px ${c.color}40` : undefined,
-              }}
-            >
-              <div
-                className="absolute inset-0 opacity-10 pointer-events-none"
-                style={{ backgroundColor: c.color }}
-              />
-
-              <div className="flex items-center justify-between w-full">
-                <Folder
-                  className="w-7 h-7"
-                  style={{ color: c.color, fill: `${c.color}40` }}
-                />
-                <span
-                  className="font-mono font-bold text-xs px-2 py-0.5 rounded-md border"
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => onSelectCategory(c.id)}
+                  className={`border bg-white/5 rounded-2xl p-3.5 flex flex-col justify-between items-start text-left relative overflow-hidden transition-all group backdrop-blur-sm ${
+                    isSelected
+                      ? 'border-2 shadow-xl scale-[1.02] bg-white/10'
+                      : 'border-white/10 hover:border-white/20 hover:bg-white/10 shadow-sm'
+                  }`}
                   style={{
-                    backgroundColor: `${c.color}20`,
-                    borderColor: `${c.color}40`,
-                    color: c.color,
+                    borderColor: isSelected ? c.color : undefined,
+                    boxShadow: isSelected ? `0 0 20px -5px ${c.color}40` : undefined,
                   }}
                 >
-                  {count}
-                </span>
-              </div>
+                  <div
+                    className="absolute inset-0 opacity-10 pointer-events-none"
+                    style={{ backgroundColor: c.color }}
+                  />
 
-              <div className="mt-3">
-                <div className="font-display font-semibold text-xs truncate text-white">
-                  {c.name}
-                </div>
-                <div className="font-mono text-[9.5px] text-slate-400 truncate mt-0.5">
-                  /{c.targetSubfolder || c.name}
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                  <div className="flex items-center justify-between w-full">
+                    <Folder
+                      className="w-7 h-7"
+                      style={{ color: c.color, fill: `${c.color}40` }}
+                    />
+                    <span
+                      className="font-mono font-bold text-xs px-2 py-0.5 rounded-md border"
+                      style={{
+                        backgroundColor: `${c.color}20`,
+                        borderColor: `${c.color}40`,
+                        color: c.color,
+                      }}
+                    >
+                      {count}
+                    </span>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="font-display font-semibold text-xs truncate text-white">
+                      {c.name}
+                    </div>
+                    <div className="font-mono text-[9.5px] text-slate-400 truncate mt-0.5">
+                      /{c.targetSubfolder || c.name}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
 
       {/* Selected Subfolder Table */}
       <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-lg backdrop-blur-sm">
@@ -203,6 +373,8 @@ export const ShelfView: React.FC<ShelfViewProps> = ({
           </div>
         )}
       </div>
+    </>
+  )}
 
       {/* File Preview Modal */}
       {previewFile && (

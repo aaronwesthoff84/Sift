@@ -84,6 +84,58 @@ export function resolveCanonicalSubfolder(suggestedName: string, existingFolders
   return trimmed;
 }
 
+// Path Normalization & Permission Helpers
+export function normalizePath(p: string): string {
+  if (!p) return "";
+  let trimmed = p.trim();
+  if (trimmed.startsWith("~")) {
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    trimmed = path.join(home, trimmed.slice(1));
+  }
+  const normalized = path.normalize(trimmed);
+  // Remove trailing slashes unless root directory
+  if (normalized.length > 1 && (normalized.endsWith("/") || normalized.endsWith("\\"))) {
+    return normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
+export function checkPathPermission(p: string): { ok: boolean; error?: string } {
+  try {
+    const normalized = normalizePath(p);
+    if (!fs.existsSync(normalized)) {
+      return { ok: false, error: `Directory does not exist: ${normalized}` };
+    }
+    fs.accessSync(normalized, fs.constants.R_OK | fs.constants.W_OK);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: `Permission denied or access error for ${p}: ${err.message}` };
+  }
+}
+
+// Recursive Empty Directory Pruning for Undo operations
+export function pruneEmptyDirectories(targetDir: string, stopDir: string = SHELF_DIR): void {
+  try {
+    const normTarget = normalizePath(targetDir);
+    const normStop = normalizePath(stopDir);
+
+    if (!normTarget.startsWith(normStop) || normTarget === normStop) {
+      return;
+    }
+
+    if (fs.existsSync(normTarget)) {
+      const items = fs.readdirSync(normTarget).filter(i => !i.startsWith("."));
+      if (items.length === 0) {
+        fs.rmdirSync(normTarget);
+        const parent = path.dirname(normTarget);
+        pruneEmptyDirectories(parent, stopDir);
+      }
+    }
+  } catch (e) {
+    console.error("Prune empty directories error:", e);
+  }
+}
+
 // Cohesive Directory Inspector
 export function isCohesiveFolder(dirPath: string): boolean {
   try {
@@ -621,9 +673,13 @@ app.post("/api/fs/undo", (req, res) => {
           const base = path.basename(entry.filename, ext);
           dest = path.join(WATCH_DIR, `${base}-restored${ext}`);
         }
+        const parentMovedDir = path.dirname(entry.movedPath);
         fs.renameSync(entry.movedPath, dest);
         entry.undone = true;
         undoneResults.push(entry.filename);
+
+        // Prune empty directories created by Sift up to SHELF_DIR (#15)
+        pruneEmptyDirectories(parentMovedDir, SHELF_DIR);
 
         db.activityLog.unshift({
           id: `act-undo-${Date.now()}`,
